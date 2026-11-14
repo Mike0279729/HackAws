@@ -375,6 +375,54 @@ Test files are dev-only and live under `tests/`, outside the three delivered app
 - [x] 25. Final checkpoint - Ensure all tests pass
   - Ensure all tests pass, ask the user if questions arise.
 
+- [x] 26. Add the local Health Assistant (Requirement 18)
+  - [x] 26.1 Add the assistant markup to `index.html`
+    - Add `<button id="assistant-fab">` with `aria-label="Abrir asistente de salud"`, `aria-expanded="false"` and `aria-controls="assistant-panel"`
+    - Add `<section id="assistant-panel" role="dialog" aria-label="Asistente de salud" hidden>` with the header "Asistente de salud" and `#assistant-close`, `#assistant-log` (`role="log"`, `aria-live="polite"`), `#assistant-suggestions` with the four chips ("Hospitales cerca de mí", "Buscar ibuprofeno", "Comparar precios", "Citas de cardiología"), `#assistant-form` with a labelled `#assistant-input` and `#assistant-send`, and a footer with `#assistant-clear` ("Borrar conversación") and the Spanish disclaimer
+    - Keep every existing ID, class and `onclick`, the three-file delivery, and no CDN
+    - _Requirements: 18.1, 18.3, 18.8, 18.11, 18.42, 18.48_
+
+  - [x] 26.2 Implement the pure assistant logic in `app.js`
+    - Add the keyword constants, `normalizeText`, `interpretMessage` (emergency first, catalog matching returning exact catalog values, symptom-to-specialty mapping, 300-character limit) and `assistantReply` (medication, prices, appointments, hospitals, emergency and fallback replies with action descriptors), with no `fetch` call
+    - Export `normalizeText`, `interpretMessage` and `assistantReply` from the guarded `module.exports`
+    - _Requirements: 18.19, 18.20, 18.21, 18.22, 18.23, 18.24, 18.25, 18.26, 18.27, 18.28, 18.29, 18.30, 18.31, 18.32, 18.33, 18.34, 18.35, 18.36, 18.37, 18.38, 18.39, 18.42_
+
+  - [x] 26.3 Style the assistant in `styles.css`
+    - Style `.assistant-fab` (56px circle, bottom-right, above the Tab_Bar with `env(safe-area-inset-bottom)` below 768px), `.assistant-panel` (bottom sheet below 768px that leaves the Tab_Bar visible, floating card from 768px), header, log, `.msg-user` (right, blue) and `.msg-assistant` (left, white), `.chip`, `.msg-action`, the form, the footer and the typing indicator
+    - Use 44px minimum targets, `:focus-visible` outlines, AA contrast, wrapping that avoids horizontal scroll at 320px, and `prefers-reduced-motion: reduce` overrides for animations and transitions
+    - _Requirements: 18.1, 18.2, 18.6, 18.7, 18.9, 18.16, 18.46, 18.47_
+
+  - [x] 26.4 Wire the assistant UI in `app.js`
+    - Implement `appendMessage` (using `textContent` and `createElement`), `openAssistant` and `closeAssistant` (`aria-expanded`, focus to `#assistant-input` on open, focus back to `#assistant-fab` on close), `handleAssistantSubmit` (ignore blank input, clear the input, 400ms typing indicator skipped under reduced motion, specialty chips when no specialty is detected), `runAssistantAction` (hospitals, medication, prices, appointments; fills the control, calls the existing search function, closes the panel below 768px, scrolls to the section), `clearAssistant` and `initAssistant`
+    - Register the fab, close, form, chips, clear and Escape handlers on `DOMContentLoaded` without any network request and without storage, show the welcome message with the disclaimer on first open, and export the new functions
+    - _Requirements: 18.3, 18.4, 18.5, 18.10, 18.12, 18.13, 18.14, 18.15, 18.16, 18.17, 18.18, 18.36, 18.40, 18.41, 18.43, 18.44, 18.45, 18.48_
+
+  - [x] 26.5 Write the assistant tests and run the full suite
+    - Create `tests/assistant.test.js` with property tests tagged `Feature: health-access-agent` for Properties 35 to 45, plus the unit and DOM tests listed in the Testing Strategy
+    - Extend `tests/structure.test.js` with the assistant IDs, roles, ARIA attributes, chips, disclaimer and CSS assertions
+    - **Property 35: Emergency priority**
+    - **Property 36: interpretMessage is total and returns a known intent**
+    - **Property 37: normalizeText is idempotent and strips diacritics**
+    - **Property 38: Catalog params are exact catalog values**
+    - **Property 39: Symptom words map to a specialty**
+    - **Property 40: Medication reply lists only matching names, at most 3**
+    - **Property 41: Prices reply is sorted ascending with the cheapest marked**
+    - **Property 42: Appointments reply contains only available future slots**
+    - **Property 43: assistantReply is pure with respect to the network and well-formed**
+    - **Property 44: appendMessage never interprets text as HTML**
+    - **Property 45: Submit handling ignores blank input and clears valid input**
+    - Run `npx vitest --run` and fix every failure without weakening existing tests
+    - **Validates: Requirements 18.1 to 18.48**
+    - _Requirements: 18.1, 18.3, 18.4, 18.5, 18.8, 18.11, 18.14, 18.17, 18.19 to 18.45, 18.48_
+
+- [x] 27. Final checkpoint - Ensure all tests pass
+  - Ensure all tests pass, ask the user if questions arise.
+
+- [x] 28. Document the assistant
+  - [x] 28.1 Update `README.md`
+    - Describe the local rule-based Health Assistant: what it can answer, that it is offline with no LLM, backend or API key, that messages are never sent or stored, the safety disclaimer, and the new test file
+    - _Requirements: 18.10, 18.29, 18.31, 18.42, 18.43_
+
 ## Notes
 
 - Tasks marked with `*` are optional and can be skipped for a faster MVP
@@ -411,7 +459,10 @@ Test files are dev-only and live under `tests/`, outside the three delivered app
     { "id": 20, "tasks": ["22.3"] },
     { "id": 21, "tasks": ["24.1"] },
     { "id": 22, "tasks": ["24.2", "24.3"] },
-    { "id": 23, "tasks": ["24.4"] }
+    { "id": 23, "tasks": ["24.4"] },
+    { "id": 24, "tasks": ["26.1", "26.2"] },
+    { "id": 25, "tasks": ["26.3", "26.4"] },
+    { "id": 26, "tasks": ["26.5", "28.1"] }
   ]
 }
 ```

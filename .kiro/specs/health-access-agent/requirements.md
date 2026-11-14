@@ -363,3 +363,68 @@ Glossary additions for Requirement 17:
 - **Quick_Action_Tile**: A rounded white tile with a coloured icon and a label that scrolls to a section.
 - **Featured_Appointment**: The royal-blue card in the Home_Area showing the earliest available slot.
 - **Tab_Bar**: The fixed bottom navigation shown below 768px, with four tabs and a centred floating button.
+
+### Requirement 18: Health Assistant (Chat)
+
+**User Story:** As a user, I want to ask a chat assistant in plain Spanish for hospitals, medications, prices, or appointments, so that I can reach the right information without browsing every section.
+
+The assistant is local and rule-based. It uses no LLM, no backend, no API key, and no new network request, and it works offline using the in-memory catalogs.
+
+#### Acceptance Criteria
+
+1. THE App SHALL display a floating Assistant_Button with `id="assistant-fab"`, an `aria-label` of "Abrir asistente de salud", and a tap target of at least 44px by 44px, fixed at the bottom-right of the viewport.
+2. WHILE the viewport width is below 768px, THE App SHALL position the Assistant_Button above the Tab_Bar using the Tab_Bar height plus `env(safe-area-inset-bottom)`.
+3. WHEN the user activates the Assistant_Button, THE App SHALL open the Assistant_Panel (`id="assistant-panel"`, `role="dialog"`, `aria-label="Asistente de salud"`), set `aria-expanded="true"` on the Assistant_Button, and move keyboard focus to `#assistant-input`.
+4. WHEN the user presses the Escape key while the Assistant_Panel is open, THE App SHALL close the Assistant_Panel and return keyboard focus to the Assistant_Button.
+5. WHEN the user activates `#assistant-close`, THE App SHALL close the Assistant_Panel and return keyboard focus to the Assistant_Button.
+6. WHILE the viewport width is below 768px, THE App SHALL display the Assistant_Panel as a bottom sheet that fills the viewport width, leaves the Tab_Bar visible, and shows the close button.
+7. WHILE the viewport width is 768px or more, THE App SHALL display the Assistant_Panel as a floating card anchored at the bottom-right.
+8. THE Assistant_Panel SHALL contain a header with the title "Asistente de salud", a close button, a message log (`id="assistant-log"`, `role="log"`, `aria-live="polite"`), a suggestion area (`id="assistant-suggestions"`), a form (`id="assistant-form"`) with a text input (`id="assistant-input"`) and a send button (`id="assistant-send"`), a "Borrar conversación" button (`id="assistant-clear"`), and a footer with a short Spanish disclaimer.
+9. THE App SHALL render user messages as right-aligned blue bubbles and assistant messages as left-aligned white bubbles.
+10. WHEN the Assistant_Panel is opened for the first time after page load, THE App SHALL show one Spanish welcome message that includes the disclaimer that the assistant gives general information only and is not medical advice or a diagnosis.
+11. THE Assistant_Panel SHALL display exactly four suggestion chips labelled "Hospitales cerca de mí", "Buscar ibuprofeno", "Comparar precios", and "Citas de cardiología".
+12. WHEN the user activates a suggestion chip, THE App SHALL submit the chip label as a user message.
+13. WHEN the user presses Enter in `#assistant-input` or activates `#assistant-send`, THE App SHALL submit the input value as a user message and clear the input.
+14. IF the submitted input is empty or contains only whitespace, THEN THE App SHALL ignore the submission and add no message.
+15. WHEN a user message is submitted, THE App SHALL show a typing indicator for approximately 400ms before adding the assistant reply.
+16. WHERE the user agent reports `prefers-reduced-motion: reduce`, THE App SHALL add the assistant reply without the typing indicator delay and SHALL disable assistant animations and transitions.
+17. WHEN the App adds a message to the message log, THE App SHALL insert the message text with `textContent` and SHALL NOT interpret user-provided text as HTML.
+18. THE App SHALL build any assistant markup, including action buttons, from DOM elements or HTML-escaped strings.
+19. THE App SHALL provide a pure function `normalizeText(text)` that trims the text, converts it to lowercase, removes diacritics, and collapses runs of whitespace into a single space, and returns an empty string for a non-string value.
+20. THE App SHALL provide a pure function `interpretMessage(text)` that returns an object `{ intent, params }` where `intent` is one of "emergency", "hospitals", "medication", "prices", "appointments", "greeting", "thanks", "help", "unknown", "empty", or "too_long", and SHALL NOT throw for any input value.
+21. IF the input is not a string or normalises to an empty string, THEN THE `interpretMessage` function SHALL return the intent "empty".
+22. IF the trimmed input is longer than 300 characters, THEN THE `interpretMessage` function SHALL return the intent "too_long".
+23. WHEN the normalised text contains an emergency keyword ("dolor de pecho", "no puedo respirar", "infarto", "sangrado fuerte", "desmayo", "convulsion", "emergencia", "urgencia", or "accidente"), THE `interpretMessage` function SHALL return the intent "emergency" regardless of any other keyword present.
+24. WHEN the normalised text contains a hospital keyword ("hospital", "clinica", "centro de salud", "cerca", "cercano"), THE `interpretMessage` function SHALL return the intent "hospitals" unless a higher-priority intent applies.
+25. WHEN the normalised text contains a medication keyword ("medicamento", "medicina", "pastilla", "farmacia", "disponible"), a phrase "busco <name>", or the name of an entry of MEDICATIONS, THE `interpretMessage` function SHALL return the intent "medication" with `params.query` set to the matched MEDICATIONS name or, when no catalog name matches, to the extracted word.
+26. WHEN the normalised text contains a price keyword ("precio", "costo", "cuanto cuesta", "comparar"), THE `interpretMessage` function SHALL return the intent "prices" with `params.service` set to the PRICES service whose name matches the text, when one matches.
+27. WHEN the normalised text contains an appointment keyword ("cita", "agendar", "reservar", "doctor", "consulta con"), THE `interpretMessage` function SHALL return the intent "appointments" with `params.specialty` set to the APPOINTMENTS specialty that matches the text, when one matches.
+28. WHEN the normalised text mentions a symptom word and no specialty name, THE `interpretMessage` function SHALL map "piel" and "sarpullido" to "Dermatología", "corazon" and "palpitaciones" to "Cardiología", and "niño", "bebe", and "hijo" to "Pediatría".
+29. WHEN `params.specialty`, `params.service`, or `params.query` is present, THE `interpretMessage` function SHALL set it to the exact catalog value, with diacritic-insensitive and case-insensitive matching, except that an extracted word for `params.query` SHALL be a substring of the normalised text.
+30. WHEN the normalised text contains only a greeting ("hola", "buenas", "buenos dias"), a thanks word ("gracias"), or a help word ("ayuda", "que puedes hacer"), THE `interpretMessage` function SHALL return "greeting", "thanks", or "help" respectively, and SHALL return "unknown" when no rule matches.
+31. THE App SHALL provide a function `assistantReply(text)` that calls `interpretMessage` and returns `{ text, actions }` where `text` is a Spanish string and `actions` is an array of `{ label, action }` objects, using only the in-memory catalogs and making no network request.
+32. WHEN the intent is "medication", THE `assistantReply` function SHALL list up to 3 MEDICATIONS entries whose name contains the query, each with pharmacy, status, and the price formatted as `"$" + toFixed(2)`, and SHALL state that no match was found when none exists.
+33. WHEN the intent is "prices" and `params.service` is set, THE `assistantReply` function SHALL list every PRICES provider for that service sorted by ascending price and SHALL mark the cheapest provider as "más económico".
+34. WHEN the intent is "prices" and no service is detected, THE `assistantReply` function SHALL ask which service the user wants and list the available service names.
+35. WHEN the intent is "appointments" and `params.specialty` is set, THE `assistantReply` function SHALL list up to 3 earliest available slots from APPOINTMENTS for that specialty, each as doctor, `date + " a las " + time`, and SHALL state that no slot is available when none exists.
+36. WHEN the intent is "appointments" and no specialty is detected, THE `assistantReply` function SHALL ask which specialty the user wants and the App SHALL offer a suggestion chip for each specialty.
+37. WHEN the intent is "hospitals", THE `assistantReply` function SHALL explain that the App will use the user's location, mention that an address can be typed in the hospitals section, and include an action labelled "Buscar hospitales cerca de mí".
+38. WHEN the intent is "emergency", THE `assistantReply` function SHALL start with a clear warning to call the local emergency number now, and SHALL include the action labelled "Buscar hospitales cerca de mí".
+39. WHEN the intent is "unknown", "empty", or "too_long", THE `assistantReply` function SHALL return a friendly Spanish message that lists what the assistant can do, with the limit of 300 characters mentioned for "too_long".
+40. WHEN the user activates the action "Buscar hospitales cerca de mí", THE App SHALL call the existing `nearbyHospitals()` flow, close the Assistant_Panel on viewports below 768px, and scroll to `#hospitals`.
+41. WHEN the user activates a "Ver en Medicamentos", "Ver en Precios", or "Ver en Citas" action, THE App SHALL fill `#medication-input`, `#service-select`, or `#specialty-select` with the detected value, call `searchMedications()`, `comparePrices()`, or `searchAppointments()`, close the Assistant_Panel on viewports below 768px, and scroll to the matching section.
+42. THE App SHALL state in every assistant reply that gives health-related guidance that the information is general and not medical advice or a diagnosis, and SHALL NOT recommend medication doses or provide a diagnosis.
+43. THE App SHALL process assistant messages only in the browser, SHALL NOT send them to any server, and SHALL NOT store them in `localStorage`, `sessionStorage`, cookies, or any other persistent storage.
+44. WHEN the user activates `#assistant-clear`, THE App SHALL remove all messages from the message log, show the welcome message again, and keep the Assistant_Panel open.
+45. WHEN the page is reloaded, THE App SHALL start with an empty conversation.
+46. THE App SHALL give every assistant control (Assistant_Button, close, send, clear, chips, action buttons) a tap target of at least 44px, a visible `:focus-visible` outline, and a text-to-background contrast ratio of at least 4.5:1.
+47. THE App SHALL avoid horizontal scrolling at a 320px viewport width with the Assistant_Panel open.
+48. THE App SHALL keep every element ID, class name, `onclick` handler, and behaviour listed in Requirements 1 to 17, SHALL remain delivered as three files with no CDN, no framework, and no new network request, and SHALL keep all existing tests passing.
+
+Glossary additions for Requirement 18:
+
+- **Assistant**: The local rule-based chat module in `app.js` made of `normalizeText`, `interpretMessage`, `assistantReply`, and the UI functions that wire the Assistant_Panel.
+- **Assistant_Button**: The floating button `#assistant-fab` that opens the Assistant_Panel.
+- **Assistant_Panel**: The `<section id="assistant-panel" role="dialog">` chat container.
+- **Intent**: The category returned by `interpretMessage` for a user message.
+- **Typing_Indicator**: The animated "escribiendo" bubble shown for approximately 400ms before an assistant reply.

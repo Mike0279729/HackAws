@@ -924,9 +924,482 @@ if (typeof document !== "undefined") {
   }
 }
 // ---------------------------------------------------------------------------
+// Health Assistant: pure rule-based logic (Requirement 18). No DOM, no fetch.
+// ---------------------------------------------------------------------------
+
+const ASSISTANT_MAX_LENGTH = 300;
+const ASSISTANT_TYPING_MS = 400;
+
+// All keyword lists are stored in normalised form (lowercase, no diacritics).
+const EMERGENCY_KEYWORDS = ["dolor de pecho", "no puedo respirar", "infarto", "sangrado fuerte", "desmayo", "convulsion", "emergencia", "urgencia", "accidente"];
+const HOSPITAL_KEYWORDS = ["hospital", "clinica", "centro de salud", "cerca", "cercano"];
+const MEDICATION_KEYWORDS = ["medicamento", "medicina", "pastilla", "farmacia", "disponible"];
+const PRICE_KEYWORDS = ["precio", "costo", "cuanto cuesta", "comparar"];
+const APPOINTMENT_KEYWORDS = ["cita", "agendar", "reservar", "doctor", "consulta con"];
+const GREETING_KEYWORDS = ["hola", "buenas", "buenos dias"];
+const THANKS_KEYWORDS = ["gracias"];
+const HELP_KEYWORDS = ["ayuda", "que puedes hacer"];
+const SYMPTOM_SPECIALTIES = {
+  piel: "Dermatología",
+  sarpullido: "Dermatología",
+  corazon: "Cardiología",
+  palpitaciones: "Cardiología",
+  nino: "Pediatría",
+  bebe: "Pediatría",
+  hijo: "Pediatría"
+};
+const ASSISTANT_STOP_WORDS = ["busco", "quiero", "un", "una", "el", "la", "de", "medicamento", "medicina", "pastilla", "farmacia", "disponible", "hay", "para"];
+const ASSISTANT_DISCLAIMER = "Información general, no es consejo médico ni diagnóstico.";
+const HOSPITAL_ACTION = { label: "Buscar hospitales cerca de mí", action: "hospitals" };
+
+function normalizeText(text) {
+  if (typeof text !== "string") return "";
+  return text.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/\s+/g, " ").trim();
+}
+
+function escapeRegExp(s) {
+  return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+// True when keyword occurs in normalised text n on word boundaries (optional plural "s").
+function containsKeyword(n, keyword) {
+  const re = new RegExp("(?:^|[^a-z0-9])" + escapeRegExp(keyword) + "s?(?:$|[^a-z0-9])");
+  return re.test(n);
+}
+
+function containsAny(n, keywords) {
+  return keywords.some((k) => containsKeyword(n, k));
+}
+
+function distinctValues(items, key) {
+  return Array.from(new Set(items.map((i) => i[key])));
+}
+
+// Returns the original catalog string whose normalised form is in n (longest first), or null.
+function matchCatalogValue(n, values) {
+  const sorted = values.slice().sort((a, b) => b.length - a.length);
+  for (const v of sorted) {
+    if (containsKeyword(n, normalizeText(v))) return v;
+  }
+  return null;
+}
+
+// Medication names also match by their first word ("ibuprofeno" for "Ibuprofeno 400mg").
+function matchMedicationName(n) {
+  const names = distinctValues(MEDICATIONS, "name");
+  const full = matchCatalogValue(n, names);
+  if (full !== null) return full;
+  for (const name of names) {
+    const first = normalizeText(name).split(" ")[0];
+    if (first && containsKeyword(n, first)) return name;
+  }
+  return null;
+}
+
+function symptomSpecialty(n) {
+  for (const word of Object.keys(SYMPTOM_SPECIALTIES)) {
+    if (containsKeyword(n, word)) return SYMPTOM_SPECIALTIES[word];
+  }
+  return null;
+}
+
+// Last word of n that is not a stop word, or "". Always a substring of n.
+function extractWord(n) {
+  const words = n.split(" ");
+  for (let i = words.length - 1; i >= 0; i--) {
+    if (words[i] !== "" && !ASSISTANT_STOP_WORDS.includes(words[i])) return words[i];
+  }
+  return "";
+}
+
+function interpretMessage(text) {
+  try {
+    if (typeof text !== "string") return { intent: "empty", params: {} };
+    if (text.trim().length > ASSISTANT_MAX_LENGTH) return { intent: "too_long", params: {} };
+    const n = normalizeText(text);
+    if (n === "") return { intent: "empty", params: {} };
+
+    if (containsAny(n, EMERGENCY_KEYWORDS)) return { intent: "emergency", params: {} };
+
+    const specialty = matchCatalogValue(n, distinctValues(APPOINTMENTS, "specialty")) || symptomSpecialty(n);
+    const service = matchCatalogValue(n, distinctValues(PRICES, "service"));
+    const medName = matchMedicationName(n);
+
+    if (containsAny(n, APPOINTMENT_KEYWORDS) || specialty) {
+      return { intent: "appointments", params: specialty ? { specialty } : {} };
+    }
+    if (containsAny(n, PRICE_KEYWORDS) || service) {
+      return { intent: "prices", params: service ? { service } : {} };
+    }
+    if (medName || containsAny(n, MEDICATION_KEYWORDS) || n.startsWith("busco ")) {
+      return { intent: "medication", params: { query: medName !== null ? medName : extractWord(n) } };
+    }
+    if (containsAny(n, HOSPITAL_KEYWORDS)) return { intent: "hospitals", params: {} };
+    if (containsAny(n, GREETING_KEYWORDS)) return { intent: "greeting", params: {} };
+    if (containsAny(n, THANKS_KEYWORDS)) return { intent: "thanks", params: {} };
+    if (containsAny(n, HELP_KEYWORDS)) return { intent: "help", params: {} };
+    return { intent: "unknown", params: {} };
+  } catch (_) {
+    return { intent: "unknown", params: {} };
+  }
+}
+
+const ASSISTANT_CAPABILITIES = "Puedo ayudarte a buscar hospitales cercanos, ver medicamentos, comparar precios y consultar citas. " + ASSISTANT_DISCLAIMER;
+const ASSISTANT_NOTE = " " + ASSISTANT_DISCLAIMER;
+
+function assistantReply(text) {
+  try {
+    const r = interpretMessage(text);
+    const p = r.params || {};
+    switch (r.intent) {
+      case "emergency":
+        return {
+          text: "⚠️ Si es una emergencia, llama ahora al número de emergencias de tu localidad. " +
+            "Puedo mostrarte los hospitales más cercanos. " + ASSISTANT_DISCLAIMER,
+          actions: [{ ...HOSPITAL_ACTION }]
+        };
+      case "medication": {
+        const q = typeof p.query === "string" ? p.query : "";
+        if (q === "") return { text: "¿Qué medicamento buscas?", actions: [] };
+        const nq = normalizeText(q);
+        const matches = MEDICATIONS.filter((m) => normalizeText(m.name).includes(nq)).slice(0, 3);
+        if (matches.length === 0) {
+          return { text: "No encontré «" + q + "» en el catálogo. Prueba con otro nombre." + ASSISTANT_NOTE, actions: [] };
+        }
+        const lines = matches.map((m) => m.name + " en " + m.pharmacy + ": " + m.status + ", $" + m.price.toFixed(2));
+        return {
+          text: lines.join("\n") + "\n" + ASSISTANT_DISCLAIMER,
+          actions: [{ label: "Ver en Medicamentos", action: "medication", value: matches[0].name }]
+        };
+      }
+      case "prices": {
+        if (!p.service) {
+          return {
+            text: "¿Qué servicio quieres comparar? Tengo: " + distinctValues(PRICES, "service").join(", ") + "." + ASSISTANT_NOTE,
+            actions: []
+          };
+        }
+        const rows = PRICES.filter((x) => x.service === p.service).sort((a, b) => a.price - b.price);
+        const lines = rows.map((x, i) => x.provider + ": $" + x.price.toFixed(2) + (i === 0 ? " (más económico)" : ""));
+        return {
+          text: lines.join("\n") + "\n" + ASSISTANT_DISCLAIMER,
+          actions: [{ label: "Ver en Precios", action: "prices", value: p.service }]
+        };
+      }
+      case "appointments": {
+        if (!p.specialty) return { text: "¿Qué especialidad necesitas?", actions: [] };
+        const slots = APPOINTMENTS.filter((a) => a.specialty === p.specialty && a.available)
+          .sort((a, b) => (a.date + " " + a.time < b.date + " " + b.time ? -1 : a.date + " " + a.time > b.date + " " + b.time ? 1 : 0))
+          .slice(0, 3);
+        if (slots.length === 0) {
+          return { text: "No hay citas disponibles para " + p.specialty + "." + ASSISTANT_NOTE, actions: [] };
+        }
+        return {
+          text: slots.map((a) => a.doctor + ": " + a.date + " a las " + a.time).join("\n") + "\n" + ASSISTANT_DISCLAIMER,
+          actions: [{ label: "Ver en Citas", action: "appointments", value: p.specialty }]
+        };
+      }
+      case "hospitals":
+        return {
+          text: "Usaré tu ubicación para buscar los hospitales más cercanos. " +
+            "También puedes escribir una dirección en la sección Hospitales." + ASSISTANT_NOTE,
+          actions: [{ ...HOSPITAL_ACTION }]
+        };
+      case "greeting":
+        return { text: "¡Hola! " + ASSISTANT_CAPABILITIES, actions: [] };
+      case "thanks":
+        return { text: "¡De nada! " + ASSISTANT_CAPABILITIES, actions: [] };
+      case "too_long":
+        return { text: "Tu mensaje es demasiado largo: usa " + ASSISTANT_MAX_LENGTH + " caracteres o menos. " + ASSISTANT_CAPABILITIES, actions: [] };
+      default:
+        return { text: ASSISTANT_CAPABILITIES, actions: [] };
+    }
+  } catch (_) {
+    return { text: ASSISTANT_CAPABILITIES, actions: [] };
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Health Assistant: UI wiring (Requirement 18). Conversation lives only in the
+// DOM: no storage, no network.
+// ---------------------------------------------------------------------------
+
+const ASSISTANT_WELCOME = "¡Hola! Soy el asistente de salud. Puedo ayudarte a buscar hospitales cercanos, medicamentos, precios y citas. " + ASSISTANT_DISCLAIMER;
+const ASSISTANT_SPECIALTY_CHIP_ATTR = "data-specialty-chip";
+let assistantPending = [];
+
+function assistantReducedMotion() {
+  try {
+    return typeof window !== "undefined" && typeof window.matchMedia === "function" &&
+      !!window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  } catch (_) { return false; }
+}
+
+function assistantIsMobile() {
+  try {
+    if (typeof window === "undefined") return false;
+    if (typeof window.matchMedia === "function") {
+      const mq = window.matchMedia("(max-width: 767px)");
+      if (mq && typeof mq.matches === "boolean") return mq.matches;
+    }
+    return typeof window.innerWidth === "number" && window.innerWidth < 768;
+  } catch (_) { return false; }
+}
+
+// Adds one bubble (.msg.msg-user | .msg.msg-assistant) to #assistant-log using
+// textContent and createElement only. Returns the bubble, or null.
+function appendMessage(role, text, actions) {
+  try {
+    const log = document.getElementById("assistant-log");
+    if (!log) return null;
+    const bubble = document.createElement("div");
+    bubble.className = "msg " + (role === "user" ? "msg-user" : "msg-assistant");
+    const p = document.createElement("p");
+    p.className = "msg-text";
+    p.textContent = text === null || text === undefined ? "" : String(text);
+    bubble.appendChild(p);
+    if (Array.isArray(actions)) {
+      for (const a of actions) {
+        if (!a || typeof a !== "object") continue;
+        const b = document.createElement("button");
+        b.type = "button";
+        b.className = "msg-action";
+        b.textContent = String(a.label);
+        b.addEventListener("click", () => runAssistantAction(a.action, a.value));
+        bubble.appendChild(b);
+      }
+    }
+    log.appendChild(bubble);
+    log.scrollTop = log.scrollHeight;
+    return bubble;
+  } catch (_) { return null; }
+}
+
+function openAssistant() {
+  try {
+    const panel = document.getElementById("assistant-panel");
+    const fab = document.getElementById("assistant-fab");
+    const log = document.getElementById("assistant-log");
+    const input = document.getElementById("assistant-input");
+    if (!panel) return;
+    panel.hidden = false;
+    panel.classList.add("open");
+    if (fab) {
+      fab.setAttribute("aria-expanded", "true");
+      fab.classList.add("open");
+    }
+    if (log && log.children.length === 0) appendMessage("assistant", ASSISTANT_WELCOME);
+    if (input && typeof input.focus === "function") input.focus();
+  } catch (_) { /* never throw */ }
+}
+
+function closeAssistant() {
+  try {
+    const panel = document.getElementById("assistant-panel");
+    const fab = document.getElementById("assistant-fab");
+    if (panel) {
+      panel.hidden = true;
+      panel.classList.remove("open");
+    }
+    if (fab) {
+      fab.setAttribute("aria-expanded", "false");
+      fab.classList.remove("open");
+      if (typeof fab.focus === "function") fab.focus();
+    }
+  } catch (_) { /* never throw */ }
+}
+
+function removeSpecialtyChips() {
+  try {
+    document.querySelectorAll("[" + ASSISTANT_SPECIALTY_CHIP_ATTR + "]").forEach((el) => el.remove());
+  } catch (_) { /* never throw */ }
+}
+
+function showSpecialtyChips() {
+  try {
+    const box = document.getElementById("assistant-suggestions");
+    if (!box) return;
+    removeSpecialtyChips();
+    for (const specialty of distinctValues(APPOINTMENTS, "specialty")) {
+      const b = document.createElement("button");
+      b.type = "button";
+      b.className = "chip chip-specialty";
+      b.setAttribute(ASSISTANT_SPECIALTY_CHIP_ATTR, "1");
+      b.textContent = specialty;
+      box.appendChild(b);
+    }
+  } catch (_) { /* never throw */ }
+}
+
+function showTypingIndicator() {
+  const log = document.getElementById("assistant-log");
+  if (!log) return null;
+  const el = document.createElement("div");
+  el.className = "msg msg-assistant typing-indicator";
+  const label = document.createElement("span");
+  label.className = "sr-only";
+  label.textContent = "escribiendo";
+  el.appendChild(label);
+  for (let i = 0; i < 3; i++) {
+    const dot = document.createElement("span");
+    dot.className = "typing-dot";
+    dot.setAttribute("aria-hidden", "true");
+    el.appendChild(dot);
+  }
+  log.appendChild(el);
+  log.scrollTop = log.scrollHeight;
+  return el;
+}
+
+function handleAssistantSubmit(rawText) {
+  try {
+    if (typeof rawText !== "string" || rawText.trim() === "") return;
+    const text = rawText.trim();
+    removeSpecialtyChips();
+    appendMessage("user", text);
+    const input = document.getElementById("assistant-input");
+    if (input) input.value = "";
+
+    const reply = assistantReply(text);
+    const needsSpecialty = (() => {
+      const r = interpretMessage(text);
+      return r.intent === "appointments" && !(r.params && r.params.specialty);
+    })();
+    const deliver = () => {
+      appendMessage("assistant", reply.text, reply.actions);
+      if (needsSpecialty) showSpecialtyChips();
+    };
+
+    if (assistantReducedMotion()) {
+      deliver();
+      return;
+    }
+    const typing = showTypingIndicator();
+    const entry = { typing, timer: null };
+    entry.timer = setTimeout(() => {
+      assistantPending = assistantPending.filter((e) => e !== entry);
+      if (typing && typing.parentNode) typing.parentNode.removeChild(typing);
+      deliver();
+    }, ASSISTANT_TYPING_MS);
+    assistantPending.push(entry);
+  } catch (_) { /* never throw */ }
+}
+
+function assistantScrollTo(id) {
+  try {
+    const target = document.getElementById(id);
+    if (target && typeof target.scrollIntoView === "function") {
+      target.scrollIntoView({ behavior: assistantReducedMotion() ? "auto" : "smooth" });
+    }
+  } catch (_) { /* never throw */ }
+}
+
+function runAssistantAction(action, value) {
+  try {
+    let target = null;
+    switch (action) {
+      case "hospitals":
+        target = "hospitals";
+        nearbyHospitals();
+        break;
+      case "medication": {
+        target = "medications";
+        const el = document.getElementById("medication-input");
+        if (el) el.value = typeof value === "string" ? value : "";
+        searchMedications();
+        break;
+      }
+      case "prices": {
+        target = "prices";
+        const el = document.getElementById("service-select");
+        if (el) el.value = typeof value === "string" ? value : "";
+        comparePrices();
+        break;
+      }
+      case "appointments": {
+        target = "appointments";
+        const el = document.getElementById("specialty-select");
+        if (el) el.value = typeof value === "string" ? value : "";
+        searchAppointments();
+        break;
+      }
+      default:
+        return;
+    }
+    if (assistantIsMobile()) closeAssistant();
+    assistantScrollTo(target);
+  } catch (_) { /* never throw */ }
+}
+
+function clearAssistant() {
+  try {
+    for (const e of assistantPending) clearTimeout(e.timer);
+    assistantPending = [];
+    removeSpecialtyChips();
+    const log = document.getElementById("assistant-log");
+    if (log) {
+      while (log.firstChild) log.removeChild(log.firstChild);
+    }
+    appendMessage("assistant", ASSISTANT_WELCOME);
+  } catch (_) { /* never throw */ }
+}
+
+// Registers all assistant listeners once. No network, no storage.
+function initAssistant() {
+  try {
+    if (typeof document === "undefined") return;
+    const fab = document.getElementById("assistant-fab");
+    const panel = document.getElementById("assistant-panel");
+    if (!fab || !panel || (fab.dataset && fab.dataset.assistantBound === "1")) return;
+    if (fab.dataset) fab.dataset.assistantBound = "1";
+
+    fab.addEventListener("click", () => {
+      if (panel.hidden) openAssistant();
+      else closeAssistant();
+    });
+
+    const close = document.getElementById("assistant-close");
+    if (close) close.addEventListener("click", closeAssistant);
+
+    const form = document.getElementById("assistant-form");
+    if (form) {
+      form.addEventListener("submit", (ev) => {
+        if (ev && typeof ev.preventDefault === "function") ev.preventDefault();
+        const input = document.getElementById("assistant-input");
+        handleAssistantSubmit(input ? input.value : "");
+      });
+    }
+
+    const chips = document.getElementById("assistant-suggestions");
+    if (chips) {
+      chips.addEventListener("click", (ev) => {
+        const t = ev && ev.target;
+        const chip = t && typeof t.closest === "function" ? t.closest(".chip") : null;
+        if (chip) handleAssistantSubmit(chip.textContent);
+      });
+    }
+
+    const clear = document.getElementById("assistant-clear");
+    if (clear) clear.addEventListener("click", clearAssistant);
+
+    document.addEventListener("keydown", (ev) => {
+      if (ev && ev.key === "Escape" && !panel.hidden) closeAssistant();
+    });
+  } catch (_) { /* never throw */ }
+}
+
+if (typeof document !== "undefined") {
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", initAssistant);
+  } else {
+    initAssistant();
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Exports for tests (no effect in the browser)
 // ---------------------------------------------------------------------------
 
 if (typeof module !== "undefined" && module.exports) {
-  module.exports = { CENTERS, MEDICATIONS, PRICES, APPOINTMENTS, addDaysISO, distanceKm, renderResults, badgeClass, escapeHtml, showPlaceholders, nearbyHospitals, searchMedications, comparePrices, searchAppointments, readCount, readRadius, directionsUrl, mapOverpassElements, geocodeAddress, fetchRemoteCenters, findHospitalsFrom, searchByAddress, setBusy, renderSummary, initActiveNav, nextAvailableAppointment, initials, renderFeaturedAppointment, initSmoothScroll };
+  module.exports = { CENTERS, MEDICATIONS, PRICES, APPOINTMENTS, addDaysISO, distanceKm, renderResults, badgeClass, escapeHtml, showPlaceholders, nearbyHospitals, searchMedications, comparePrices, searchAppointments, readCount, readRadius, directionsUrl, mapOverpassElements, geocodeAddress, fetchRemoteCenters, findHospitalsFrom, searchByAddress, setBusy, renderSummary, initActiveNav, nextAvailableAppointment, initials, renderFeaturedAppointment, initSmoothScroll, ASSISTANT_MAX_LENGTH, ASSISTANT_TYPING_MS, EMERGENCY_KEYWORDS, HOSPITAL_KEYWORDS, MEDICATION_KEYWORDS, PRICE_KEYWORDS, APPOINTMENT_KEYWORDS, SYMPTOM_SPECIALTIES, ASSISTANT_DISCLAIMER, normalizeText, interpretMessage, assistantReply, appendMessage, openAssistant, closeAssistant, handleAssistantSubmit, runAssistantAction, clearAssistant, initAssistant };
 }

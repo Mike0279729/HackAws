@@ -947,6 +947,139 @@
         "chatSessionId": "sess_6d4f6968-cab5-4234-88d6-f40a5210b20d",
         "timestamp": 1794682372935
       }
+    ],
+    "26.1 Add the assistant markup to `index.html`": [
+      {
+        "executionId": "95855e49-63f2-4145-8383-58c01e584686",
+        "chatSessionId": "sess_6d4f6968-cab5-4234-88d6-f40a5210b20d",
+        "timestamp": 1794683347278
+      },
+      {
+        "executionId": "95855e49-63f2-4145-8383-58c01e584686",
+        "chatSessionId": "sess_6d4f6968-cab5-4234-88d6-f40a5210b20d",
+        "timestamp": 1794683350411
+      },
+      {
+        "executionId": "95855e49-63f2-4145-8383-58c01e584686",
+        "chatSessionId": "sess_6d4f6968-cab5-4234-88d6-f40a5210b20d",
+        "timestamp": 1794683422960
+      }
+    ],
+    "26.2 Implement the pure assistant logic in `app.js`": [
+      {
+        "executionId": "95855e49-63f2-4145-8383-58c01e584686",
+        "chatSessionId": "sess_6d4f6968-cab5-4234-88d6-f40a5210b20d",
+        "timestamp": 1794683347345
+      },
+      {
+        "executionId": "95855e49-63f2-4145-8383-58c01e584686",
+        "chatSessionId": "sess_6d4f6968-cab5-4234-88d6-f40a5210b20d",
+        "timestamp": 1794683350932
+      },
+      {
+        "executionId": "95855e49-63f2-4145-8383-58c01e584686",
+        "chatSessionId": "sess_6d4f6968-cab5-4234-88d6-f40a5210b20d",
+        "timestamp": 1794683423675
+      }
+    ],
+    "26.3 Style the assistant in `styles.css`": [
+      {
+        "executionId": "95855e49-63f2-4145-8383-58c01e584686",
+        "chatSessionId": "sess_6d4f6968-cab5-4234-88d6-f40a5210b20d",
+        "timestamp": 1794683347408
+      },
+      {
+        "executionId": "95855e49-63f2-4145-8383-58c01e584686",
+        "chatSessionId": "sess_6d4f6968-cab5-4234-88d6-f40a5210b20d",
+        "timestamp": 1794683426857
+      },
+      {
+        "executionId": "95855e49-63f2-4145-8383-58c01e584686",
+        "chatSessionId": "sess_6d4f6968-cab5-4234-88d6-f40a5210b20d",
+        "timestamp": 1794683490818
+      }
+    ],
+    "26.4 Wire the assistant UI in `app.js`": [
+      {
+        "executionId": "95855e49-63f2-4145-8383-58c01e584686",
+        "chatSessionId": "sess_6d4f6968-cab5-4234-88d6-f40a5210b20d",
+        "timestamp": 1794683347468
+      },
+      {
+        "executionId": "95855e49-63f2-4145-8383-58c01e584686",
+        "chatSessionId": "sess_6d4f6968-cab5-4234-88d6-f40a5210b20d",
+        "timestamp": 1794683427473
+      },
+      {
+        "executionId": "95855e49-63f2-4145-8383-58c01e584686",
+        "chatSessionId": "sess_6d4f6968-cab5-4234-88d6-f40a5210b20d",
+        "timestamp": 1794683491010
+      }
+    ],
+    "26.5 Write the assistant tests and run the full suite": [
+      {
+        "executionId": "95855e49-63f2-4145-8383-58c01e584686",
+        "chatSessionId": "sess_6d4f6968-cab5-4234-88d6-f40a5210b20d",
+        "timestamp": 1794683347523
+      },
+      {
+        "executionId": "95855e49-63f2-4145-8383-58c01e584686",
+        "chatSessionId": "sess_6d4f6968-cab5-4234-88d6-f40a5210b20d",
+        "timestamp": 1794683494381
+      },
+      {
+        "executionId": "95855e49-63f2-4145-8383-58c01e584686",
+        "chatSessionId": "sess_6d4f6968-cab5-4234-88d6-f40a5210b20d",
+        "timestamp": 1794683750477
+      }
+    ],
+    "27. Final checkpoint - Ensure all tests pass": [
+      {
+        "executionId": "95855e49-63f2-4145-8383-58c01e584686",
+        "chatSessionId": "sess_6d4f6968-cab5-4234-88d6-f40a5210b20d",
+        "timestamp": 1794683347567
+      },
+      {
+        "executionId": "95855e49-63f2-4145-8383-58c01e584686",
+        "chatSessionId": "sess_6d4f6968-cab5-4234-88d6-f40a5210b20d",
+        "timestamp": 1794683754159
+      },
+      {
+        "executionId": "95855e49-63f2-4145-8383-58c01e584686",
+        "chatSessionId": "sess_6d4f6968-cab5-4234-88d6-f40a5210b20d",
+        "timestamp": 1794683781264
+      }
+    ],
+    "28.1 Update `README.md`": [
+      {
+        "executionId": "95855e49-63f2-4145-8383-58c01e584686",
+        "chatSessionId": "sess_6d4f6968-cab5-4234-88d6-f40a5210b20d",
+        "timestamp": 1794683347609
+      },
+      {
+        "executionId": "95855e49-63f2-4145-8383-58c01e584686",
+        "chatSessionId": "sess_6d4f6968-cab5-4234-88d6-f40a5210b20d",
+        "timestamp": 1794683494989
+      },
+      {
+        "executionId": "95855e49-63f2-4145-8383-58c01e584686",
+        "chatSessionId": "sess_6d4f6968-cab5-4234-88d6-f40a5210b20d",
+        "timestamp": 1794683751291
+      }
+    ],
+    "26. Add the local Health Assistant (Requirement 18)": [
+      {
+        "executionId": "95855e49-63f2-4145-8383-58c01e584686",
+        "chatSessionId": "sess_6d4f6968-cab5-4234-88d6-f40a5210b20d",
+        "timestamp": 1794683750538
+      }
+    ],
+    "28. Document the assistant": [
+      {
+        "executionId": "95855e49-63f2-4145-8383-58c01e584686",
+        "chatSessionId": "sess_6d4f6968-cab5-4234-88d6-f40a5210b20d",
+        "timestamp": 1794683751328
+      }
     ]
   }
 }

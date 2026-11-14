@@ -39,7 +39,42 @@ If a request fails, times out or returns nothing usable, the app shows the built
 
 ### Attribution
 
-When results come from OpenStreetMap, the page shows "Data � OpenStreetMap contributors". It is hidden when the offline fallback is used. The data is available under the [ODbL](https://www.openstreetmap.org/copyright).
+When results come from OpenStreetMap, the page shows "Data � OpenStreetMap contributors". It is hidden when the offline fallback is used. The data is available under the [ODbL](https://www.openstreetmap.org/copyright).
+
+## Health Assistant (chat)
+
+A floating button at the bottom-right (`#assistant-fab`, "Abrir asistente de salud") opens a chat panel where you can ask in plain Spanish for hospitals, medications, prices or appointments. On screens below 768px it is a bottom sheet above the tab bar. On wider screens it is a floating card. Press Escape or the close button to dismiss it.
+
+### What it can do
+
+- **Hospitals**: explains that the app will use your location (or an address typed in the hospitals section) and offers a "Buscar hospitales cerca de mí" action.
+- **Medications**: lists up to 3 matching medications with pharmacy, status and price.
+- **Prices**: lists every provider for a service, cheapest first, and marks the cheapest as "más económico". If no service is detected, it asks which one you want.
+- **Appointments**: lists up to 3 earliest available slots for a specialty. If no specialty is detected, it asks and offers one chip per specialty. Symptom words map to a specialty (for example "piel" to Dermatología, "corazón" to Cardiología, "bebé" to Pediatría).
+- **Shortcuts**: reply buttons such as "Ver en Medicamentos", "Ver en Precios" and "Ver en Citas" fill the matching form, run the search and scroll to that section.
+
+### Example phrases
+
+- "Hospitales cerca de mí"
+- "Buscar ibuprofeno"
+- "¿Cuánto cuesta una consulta general?" or "Comparar precios"
+- "Citas de cardiología" or "Quiero agendar una cita para mi hijo"
+- "Ayuda" or "¿Qué puedes hacer?"
+
+The panel also shows four suggestion chips with the first four examples. Messages are limited to 300 characters. Unrecognised messages get a friendly reply that lists what the assistant can do.
+
+### Local, rule-based, private
+
+The assistant is a set of keyword rules in `app.js` (`normalizeText`, `interpretMessage`, `assistantReply`). It uses no LLM, no backend and no API key. It makes no network requests and answers only from the built-in medication, price and appointment data, so it works offline. Messages are processed in the browser, are never sent anywhere, and are not saved in `localStorage`, `sessionStorage`, cookies or anywhere else. Reloading the page or pressing "Borrar conversación" starts a fresh conversation.
+
+### Disclaimer
+
+The assistant gives general information only. It is not medical advice or a diagnosis, and it never recommends medication doses. The welcome message, the panel footer and replies with health-related guidance say so. Consult a health professional for medical decisions.
+
+### Emergencies
+
+If a message contains an emergency term (such as "dolor de pecho", "no puedo respirar", "infarto", "sangrado fuerte", "desmayo", "convulsión", "emergencia", "urgencia" or "accidente"), the assistant takes priority over any other topic in the message. It starts its reply with a warning to call the local emergency number now, and it offers the "Buscar hospitales cerca de mí" action. The assistant is not a substitute for emergency services.
+
 ## Running the app
 
 Open `index.html` directly in a browser (double-click it, or use File > Open).

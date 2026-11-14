@@ -1048,6 +1048,278 @@ function renderFeaturedAppointment():
 
 ---
 
+## Health Assistant (Requirement 18)
+
+### Overview
+
+A local, rule-based chat assistant is added as a new module, "Assistant", in the same three files. It has no LLM, no backend, no API key and no new network request. It reads the in-memory catalogs (`MEDICATIONS`, `PRICES`, `APPOINTMENTS`) and, for hospital requests, triggers the existing `nearbyHospitals()` flow, which keeps its current behaviour and network rules. Conversation state lives only in the DOM, so a reload resets it and nothing is written to `localStorage`.
+
+### Architecture
+
+```mermaid
+graph TD
+    FAB[#assistant-fab] -->|click| OPEN[openAssistant]
+    OPEN --> PANEL[#assistant-panel]
+    PANEL --> FORM[#assistant-form]
+    CHIPS[#assistant-suggestions] -->|click| SUBMIT[handleAssistantSubmit]
+    FORM -->|submit / Enter| SUBMIT
+    SUBMIT --> APPEND[appendMessage user]
+    SUBMIT --> REPLY[assistantReply]
+    REPLY --> INTERP[interpretMessage]
+    INTERP --> NORM[normalizeText]
+    REPLY --> CAT[(MEDICATIONS / PRICES / APPOINTMENTS)]
+    REPLY --> APPEND2[appendMessage assistant + actions]
+    APPEND2 -->|action click| ACT[runAssistantAction]
+    ACT --> EXISTING[nearbyHospitals / searchMedications / comparePrices / searchAppointments]
+```
+
+Layers: pure logic (`normalizeText`, `interpretMessage`, `assistantReply`) has no DOM access and is exported for tests. UI wiring (`openAssistant`, `closeAssistant`, `appendMessage`, `handleAssistantSubmit`, `runAssistantAction`, `clearAssistant`, `initAssistant`) touches the DOM and is registered on `DOMContentLoaded`.
+
+### UI wireframe
+
+```
+Mobile (< 768px)                         Desktop (>= 768px)
++--------------------------------+       +------------------ +----------------------+
+| page content                   |       | page content      | Asistente de salud ✕ |
+|                                |       |                   |----------------------|
+|--------------------------------|       |                   | [asistente] Hola...  |
+| Asistente de salud          ✕  |       |                   |         [usuario] .. |
+|--------------------------------|       |                   | chips                |
+| (white) Hola, soy el asistente |       |                   | [input......] [Enviar]|
+|                 (blue) Citas.. |       |                   | Borrar conversación  |
+| [Hospitales cerca de mí] [..]  |       |                   | Aviso: info general  |
+| [ escribe tu pregunta ] [Enviar]|      |              (AI) +----------------------+
+| Borrar conversación | Aviso     |       |                  (AI) = #assistant-fab
+|--------------------------------|       +--------------------------------------------+
+| Inicio Hosp. (Pre) Med. Citas  |  <- Tab_Bar stays visible
++--------------------------------+
+```
+
+### Components and Interfaces
+
+| Component | Kind | Responsibility |
+|---|---|---|
+| `normalizeText(text)` | pure | trim, lowercase, strip diacritics, collapse spaces; `""` for non-strings |
+| `interpretMessage(text)` | pure | returns `{ intent, params }`; never throws |
+| `assistantReply(text)` | pure over catalogs | returns `{ text, actions: [{ label, action, value? }] }` |
+| `appendMessage(role, text, actions?)` | DOM | adds one bubble with `textContent`, plus action buttons built with `createElement` |
+| `openAssistant()` / `closeAssistant()` | DOM | toggle panel, `aria-expanded`, focus management |
+| `handleAssistantSubmit(rawText)` | DOM | validate, append user bubble, typing indicator, append reply |
+| `runAssistantAction(action, value)` | DOM | fills inputs and calls existing search functions, then scrolls |
+| `clearAssistant()` | DOM | empties the log and shows the welcome message |
+| `initAssistant()` | DOM | registers listeners (fab, close, form, chips, clear, Escape) |
+
+Constants: `ASSISTANT_MAX_LENGTH = 300`, `ASSISTANT_TYPING_MS = 400`, `EMERGENCY_KEYWORDS`, `HOSPITAL_KEYWORDS`, `MEDICATION_KEYWORDS`, `PRICE_KEYWORDS`, `APPOINTMENT_KEYWORDS`, `SYMPTOM_SPECIALTIES` (`piel`, `sarpullido` to Dermatología; `corazon`, `palpitaciones` to Cardiología; `niño`, `bebe`, `hijo` to Pediatría; stored in normalised form, so `niño` becomes `nino`), `ASSISTANT_DISCLAIMER`.
+
+New exports in the guarded `module.exports`: `normalizeText`, `interpretMessage`, `assistantReply`, `appendMessage`, `openAssistant`, `closeAssistant`, `handleAssistantSubmit`, `clearAssistant`, `initAssistant`.
+
+### Markup
+
+```html
+<button id="assistant-fab" class="assistant-fab" type="button"
+        aria-label="Abrir asistente de salud" aria-expanded="false"
+        aria-controls="assistant-panel">💬</button>
+
+<section id="assistant-panel" class="assistant-panel" role="dialog"
+         aria-label="Asistente de salud" hidden>
+  <header class="assistant-header">
+    <h2>Asistente de salud</h2>
+    <button id="assistant-close" type="button" aria-label="Cerrar asistente">✕</button>
+  </header>
+  <div id="assistant-log" class="assistant-log" role="log" aria-live="polite"></div>
+  <div id="assistant-suggestions" class="assistant-suggestions">
+    <button type="button" class="chip">Hospitales cerca de mí</button>
+    <button type="button" class="chip">Buscar ibuprofeno</button>
+    <button type="button" class="chip">Comparar precios</button>
+    <button type="button" class="chip">Citas de cardiología</button>
+  </div>
+  <form id="assistant-form" class="assistant-form" autocomplete="off">
+    <label for="assistant-input" class="sr-only">Escribe tu pregunta</label>
+    <input id="assistant-input" type="text" maxlength="300" placeholder="Escribe tu pregunta">
+    <button id="assistant-send" type="submit">Enviar</button>
+  </form>
+  <footer class="assistant-footer">
+    <button id="assistant-clear" type="button">Borrar conversación</button>
+    <p>Información general, no es consejo médico ni diagnóstico. Tus mensajes no salen de tu navegador.</p>
+  </footer>
+</section>
+```
+
+The `maxlength` is a convenience only; `interpretMessage` still enforces the 300-character limit.
+
+### Algorithmic Pseudocode
+
+#### normalizeText
+
+```pascal
+FUNCTION normalizeText(text)
+  IF typeof text != "string" THEN RETURN ""
+  s <- text.normalize("NFD").replace(/[\u0300-\u036f]/g, "")
+  s <- s.toLowerCase().replace(/\s+/g, " ").trim()
+  RETURN s
+END
+```
+
+Postconditions: result has no combining marks, no uppercase letters, no leading, trailing or repeated spaces; `normalizeText(normalizeText(x)) = normalizeText(x)`.
+
+#### interpretMessage
+
+```pascal
+FUNCTION interpretMessage(text)
+  TRY
+    IF typeof text != "string" THEN RETURN {intent: "empty", params: {}}
+    IF text.trim().length > ASSISTANT_MAX_LENGTH THEN RETURN {intent: "too_long", params: {}}
+    n <- normalizeText(text)
+    IF n = "" THEN RETURN {intent: "empty", params: {}}
+
+    IF containsAny(n, EMERGENCY_KEYWORDS) THEN RETURN {intent: "emergency", params: {}}
+
+    specialty <- matchCatalogValue(n, distinct APPOINTMENTS.specialty) OR symptomSpecialty(n)
+    service   <- matchCatalogValue(n, distinct PRICES.service)
+    medName   <- matchCatalogValue(n, distinct MEDICATIONS.name)
+
+    IF containsAny(n, APPOINTMENT_KEYWORDS) OR specialty != null THEN
+       RETURN {intent: "appointments", params: specialty ? {specialty} : {}}
+    IF containsAny(n, PRICE_KEYWORDS) OR service != null THEN
+       RETURN {intent: "prices", params: service ? {service} : {}}
+    IF medName != null OR containsAny(n, MEDICATION_KEYWORDS) OR startsWith "busco " THEN
+       RETURN {intent: "medication", params: {query: medName ?? extractWord(n)}}
+    IF containsAny(n, HOSPITAL_KEYWORDS) THEN RETURN {intent: "hospitals", params: {}}
+    IF isGreeting(n) THEN RETURN {intent: "greeting", params: {}}
+    IF isThanks(n)   THEN RETURN {intent: "thanks",   params: {}}
+    IF isHelp(n)     THEN RETURN {intent: "help",     params: {}}
+    RETURN {intent: "unknown", params: {}}
+  CATCH
+    RETURN {intent: "unknown", params: {}}
+END
+```
+
+`containsAny` matches keywords on word boundaries of the normalised text, so "cita" does not match inside "capacita". Keywords are themselves normalised. `matchCatalogValue(n, values)` returns the first catalog value whose `normalizeText(value)` is contained in `n` (longest value first), and returns the original catalog string, which makes `params` exact catalog values. `extractWord(n)` returns the last word of `n` that is not a stop word (`busco`, `quiero`, `un`, `una`, `el`, `la`, `de`, `medicamento`, `medicina`, `pastilla`, `farmacia`, `disponible`, `hay`, `para`), or `""` when none remains; it is always a substring of `n`. When `extractWord` yields `""`, the reply asks which medication the user needs.
+
+Order of precedence: emergency, appointments, prices, medication, hospitals, greeting, thanks, help, unknown. Catalog-name matches count as intent signals, so "radiografía" gives "prices" and "cardiología" gives "appointments". "Hospital" is in the hospital list only; a message such as "hospital cerca" yields "hospitals".
+
+#### assistantReply
+
+```pascal
+FUNCTION assistantReply(text)
+  r <- interpretMessage(text)
+  CASE r.intent OF
+    "emergency":
+       RETURN {text: "⚠️ Si es una emergencia, llama ahora al número de emergencias de tu localidad. " +
+                     "Puedo mostrarte los hospitales más cercanos. " + ASSISTANT_DISCLAIMER,
+               actions: [HOSPITAL_ACTION]}
+    "medication":
+       q <- r.params.query
+       IF q = "" THEN RETURN {text: "¿Qué medicamento buscas?", actions: []}
+       matches <- MEDICATIONS.filter(m => normalizeText(m.name).includes(normalizeText(q))).slice(0, 3)
+       IF matches is empty THEN RETURN {text: "No encontré «" + q + "» en el catálogo.", actions: []}
+       lines <- matches.map(m => m.name + " en " + m.pharmacy + ": " + m.status + ", $" + m.price.toFixed(2))
+       RETURN {text: join(lines), actions: [{label: "Ver en Medicamentos", action: "medication", value: matches[0].name}]}
+    "prices":
+       IF r.params.service undefined THEN RETURN {text: "¿Qué servicio quieres comparar? " + list(services), actions: []}
+       rows <- PRICES.filter(p => p.service = r.params.service).sort(byPriceAscending)
+       lines <- rows.map(p => p.provider + ": $" + p.price.toFixed(2)); append " (más económico)" to rows[0]
+       RETURN {text: join(lines), actions: [{label: "Ver en Precios", action: "prices", value: service}]}
+    "appointments":
+       IF r.params.specialty undefined THEN RETURN {text: "¿Qué especialidad necesitas?", actions: []}  // chips offered by UI
+       slots <- APPOINTMENTS.filter(a => a.specialty = specialty AND a.available)
+                            .sort(by date, then time).slice(0, 3)
+       IF slots is empty THEN RETURN {text: "No hay citas disponibles para " + specialty + ".", actions: []}
+       RETURN {text: join(slots.map(doctor + ": " + date + " a las " + time)),
+               actions: [{label: "Ver en Citas", action: "appointments", value: specialty}]}
+    "hospitals":
+       RETURN {text: "Usaré tu ubicación para buscar los hospitales más cercanos. " +
+                     "También puedes escribir una dirección en la sección Hospitales.",
+               actions: [HOSPITAL_ACTION]}
+    "greeting" | "thanks" | "help" | "unknown" | "empty" | "too_long": friendly Spanish text listing capabilities
+  END
+END
+```
+
+`HOSPITAL_ACTION = {label: "Buscar hospitales cerca de mí", action: "hospitals"}`. Replies for medication, prices, appointments and hospitals end with a one-line general-information note. The assistant never gives doses or diagnoses, and symptom words only map to a specialty to find slots. `assistantReply` never calls `fetch`.
+
+#### appendMessage
+
+```pascal
+FUNCTION appendMessage(role, text, actions)
+  log <- document.getElementById("assistant-log")
+  bubble <- createElement("div"); bubble.className <- "msg msg-" + role
+  p <- createElement("p"); p.textContent <- String(text)      // never innerHTML
+  bubble.appendChild(p)
+  FOR EACH a IN actions OR [] DO
+    b <- createElement("button"); b.type <- "button"; b.className <- "msg-action"
+    b.textContent <- a.label; b.addEventListener("click", () => runAssistantAction(a.action, a.value))
+    bubble.appendChild(b)
+  log.appendChild(bubble); log.scrollTop <- log.scrollHeight
+  RETURN bubble
+END
+```
+
+#### handleAssistantSubmit
+
+```pascal
+FUNCTION handleAssistantSubmit(rawText)
+  IF typeof rawText != "string" OR rawText.trim() = "" THEN RETURN
+  appendMessage("user", rawText.trim())
+  input.value <- ""
+  reply <- assistantReply(rawText)
+  IF matchMedia("(prefers-reduced-motion: reduce)").matches THEN appendMessage("assistant", reply.text, reply.actions)
+  ELSE
+    typing <- showTypingIndicator()
+    setTimeout(() => { typing.remove(); appendMessage("assistant", reply.text, reply.actions) }, ASSISTANT_TYPING_MS)
+  IF intent is appointments without specialty THEN show one chip per specialty in #assistant-suggestions
+END
+```
+
+#### openAssistant / closeAssistant
+
+```pascal
+FUNCTION openAssistant()
+  panel.hidden <- false; fab.setAttribute("aria-expanded", "true")
+  IF log has no messages THEN appendMessage("assistant", WELCOME_TEXT + " " + ASSISTANT_DISCLAIMER)
+  input.focus()
+END
+
+FUNCTION closeAssistant()
+  panel.hidden <- true; fab.setAttribute("aria-expanded", "false")
+  fab.focus()
+END
+```
+
+A document-level `keydown` listener calls `closeAssistant()` when `event.key = "Escape"` and the panel is not hidden. Focus is not trapped (the panel is non-modal), and `Tab` can leave the panel.
+
+#### runAssistantAction
+
+```pascal
+FUNCTION runAssistantAction(action, value)
+  CASE action OF
+    "hospitals":    target <- "hospitals";    nearbyHospitals()
+    "medication":   target <- "medications";  medication-input.value <- value; searchMedications()
+    "prices":       target <- "prices";       service-select.value <- value;     comparePrices()
+    "appointments": target <- "appointments"; specialty-select.value <- value;   searchAppointments()
+  END
+  IF viewport < 768px THEN closeAssistant()
+  document.getElementById(target).scrollIntoView({behavior: reducedMotion ? "auto" : "smooth"})
+END
+```
+
+Each call is guarded so a missing element never throws. Selecting from `#service-select` or `#specialty-select` uses only values that exist in the select options.
+
+### CSS design
+
+`.assistant-fab` is `position: fixed; right: 16px; bottom: calc(var(--tabbar-height) + 16px + env(safe-area-inset-bottom))` below 768px, and `bottom: 24px` from 768px. It is a 56px royal-blue circle with white text. `.assistant-panel` below 768px is a fixed bottom sheet (`left: 0; right: 0; bottom: calc(var(--tabbar-height) + env(safe-area-inset-bottom)); max-height: 80vh`), so the Tab_Bar stays visible. From 768px it is a 380px wide floating card at `right: 24px; bottom: 96px`. `.msg-user` is right-aligned on the primary blue with white text, and `.msg-assistant` is left-aligned on white with a border. Buttons have `min-height: 44px`, `:focus-visible` outlines of at least 3px, `min-width: 0` and `overflow-wrap: anywhere` on bubbles to avoid horizontal scroll at 320px. `@media (prefers-reduced-motion: reduce)` removes the typing-dot animation and panel transitions. The typing indicator is three dots with a pulse animation.
+
+### Design decisions
+
+- **Rule-based over LLM**: the user chose a local assistant. It keeps the app offline, key-free and deterministic, and makes the logic testable with property-based tests.
+- **Pure logic split from DOM**: `interpretMessage` and `assistantReply` take strings and return plain objects, so they need no jsdom.
+- **Catalog values returned exactly**: matching is normalised, but `params` carries the original catalog string, so it can be assigned to a `<select>` directly.
+- **Emergency first**: a safety rule that no other intent can override.
+- **Non-modal dialog**: the Tab_Bar stays reachable on mobile, and Escape and the close button restore focus to the button.
+- **No persistence**: privacy is guaranteed by never writing messages anywhere.
+
+---
+
 ## Correctness Properties
 
 *A property is a characteristic or behavior that should hold true across all valid executions of a system — essentially, a formal statement about what the system should do. Properties serve as the bridge between human-readable specifications and machine-verifiable correctness guarantees.*
@@ -1233,6 +1505,72 @@ function renderFeaturedAppointment():
 
 **Validates: Requirements 17.18, 17.19, 17.27**
 
+### Property 35: Emergency priority
+
+*For any* string that contains an emergency keyword (in any letter case, with or without diacritics) combined with any other text, including keywords of other intents, `interpretMessage` returns the intent "emergency", and `assistantReply` returns a text that contains a call-to-emergency warning and an action labelled "Buscar hospitales cerca de mí".
+
+**Validates: Requirements 18.23, 18.38**
+
+### Property 36: interpretMessage is total and returns a known intent
+
+*For any* input value (arbitrary strings including very long and Unicode strings, and non-string values), `interpretMessage` does not throw and returns an object whose `intent` is one of "emergency", "hospitals", "medication", "prices", "appointments", "greeting", "thanks", "help", "unknown", "empty", "too_long", and whose `params` is an object; trimmed strings longer than 300 characters give "too_long", and non-strings or blank strings give "empty".
+
+**Validates: Requirements 18.20, 18.21, 18.22, 18.30**
+
+### Property 37: normalizeText is idempotent and strips diacritics
+
+*For any* string, `normalizeText(normalizeText(s))` equals `normalizeText(s)`, and the result contains no combining marks (`\u0300` to `\u036f`), no uppercase letters, no leading or trailing whitespace, and no run of two or more whitespace characters.
+
+**Validates: Requirements 18.19**
+
+### Property 38: Catalog params are exact catalog values
+
+*For any* message built from a catalog specialty, service, or medication name with random letter case and diacritics removed or kept, `interpretMessage` returns `params.specialty`, `params.service`, or `params.query` strictly equal to the original catalog value, and *for any* message where `params.query` is an extracted word, that word is a substring of `normalizeText(message)`.
+
+**Validates: Requirements 18.25, 18.26, 18.27, 18.29**
+
+### Property 39: Symptom words map to a specialty
+
+*For any* message that contains a symptom word from the mapping (piel, sarpullido, corazon, palpitaciones, niño, bebe, hijo) in any case and with or without diacritics, and no emergency keyword, `interpretMessage` returns the intent "appointments" with `params.specialty` equal to the mapped catalog specialty.
+
+**Validates: Requirements 18.28, 18.29**
+
+### Property 40: Medication reply lists only matching names, at most 3
+
+*For any* medication query and catalog, the medication reply contains at most 3 entries, every listed medication name contains the normalised query, every listed price equals `"$" + price.toFixed(2)` for its catalog entry, and when no catalog name contains the query the reply states that none was found and lists no entries.
+
+**Validates: Requirements 18.32**
+
+### Property 41: Prices reply is sorted ascending with the cheapest marked
+
+*For any* PRICES catalog and detected service, the providers listed in the reply are exactly the catalog entries for that service, ordered by non-decreasing price, and only the first entry carries the "más económico" mark.
+
+**Validates: Requirements 18.33**
+
+### Property 42: Appointments reply contains only available future slots
+
+*For any* APPOINTMENTS catalog and detected specialty, the reply lists at most 3 slots, each slot is available, has the requested specialty and a date strictly after today, and the listed slots are the earliest ones in non-decreasing `date` then `time` order.
+
+**Validates: Requirements 18.35**
+
+### Property 43: assistantReply is pure with respect to the network and well-formed
+
+*For any* string, `assistantReply` returns `{ text, actions }` where `text` is a non-empty string, `actions` is an array of objects with a non-empty string `label` and a known `action`, and `fetch` is called zero times.
+
+**Validates: Requirements 18.31, 18.39**
+
+### Property 44: appendMessage never interprets text as HTML
+
+*For any* string (including strings with tags, attributes, entities, and script text) and any role, after `appendMessage(role, text)` the message bubble's `textContent` contains the text unchanged, and the bubble contains no element other than the message paragraph and the action buttons.
+
+**Validates: Requirements 18.17, 18.18**
+
+### Property 45: Submit handling ignores blank input and clears valid input
+
+*For any* whitespace-only string, `handleAssistantSubmit` leaves the message log unchanged, and *for any* non-blank string under reduced motion, it adds exactly one user message and one assistant message, and leaves `#assistant-input` empty.
+
+**Validates: Requirements 18.13, 18.14, 18.16**
+
 ## Error Handling
 
 ### Scenario 1: Geolocation denied or unavailable
@@ -1289,6 +1627,16 @@ function renderFeaturedAppointment():
 **Recovery**: Same as Scenario 1. README instructs users to serve via a local server (`python -m http.server`) if they encounter this.
 
 ---
+
+### Assistant scenarios (Requirement 18)
+
+- **Scenario A1: Empty or whitespace message.** `handleAssistantSubmit` returns without adding a message. `interpretMessage` returns "empty" if called directly.
+- **Scenario A2: Message over 300 characters.** `interpretMessage` returns "too_long" and `assistantReply` explains the 300-character limit. The message is still shown as a user bubble, truncated by no code path; the log wraps long text.
+- **Scenario A3: Unknown message.** The reply is a friendly fallback listing what the assistant can do, with chips still available.
+- **Scenario A4: Medication not in the catalog.** The reply says none was found and suggests another name, with no action button.
+- **Scenario A5: Missing catalog data or DOM element.** `assistantReply` wraps catalog access in try/catch and returns the generic fallback text. `runAssistantAction` skips any missing element and never throws.
+- **Scenario A6: Geolocation denied after the hospital action.** The existing `nearbyHospitals()` error handling (Scenario 1) renders the message in `#hospitals-results`, and the section is scrolled into view so the user sees it.
+- **Scenario A7: Panel elements missing.** `initAssistant()` returns without registering listeners when `#assistant-fab` or `#assistant-panel` is absent, so a partial page does not throw.
 
 ## Testing Strategy
 
@@ -1358,6 +1706,14 @@ Manual smoke test by opening `index.html` in a browser:
 - Example tests cover `renderFeaturedAppointment` (card shown with doctor, initials, "a las", and "Disponible" for the earliest slot; card hidden when `APPOINTMENTS` has no available slot), `initActiveNav` marking both a top-nav link and a tab, `initSmoothScroll` calling `scrollIntoView` for "Comenzar" and tiles, and the hospital, medication, price, and appointment cards carrying the expected icons.
 - UI rendering is not a good fit for property-based testing, so the properties above apply only to the pure helpers and the Renderer.
 
+### Testing the Health Assistant (Requirement 18)
+
+- Add `tests/assistant.test.js`. Property-based tests (fast-check, at least 100 iterations, tagged `Feature: health-access-agent, Property N: <title>`) cover Properties 35 to 45, with `fetch` mocked to count calls.
+- Unit tests: each intent with a concrete Spanish example ("tengo dolor de pecho", "busco ibuprofeno", "cuanto cuesta una radiografia", "quiero una cita de cardiologia", "mi hijo tiene sarpullido"); the medication-not-found reply; the specialty question; the unknown fallback; the "too_long" and "empty" replies.
+- DOM tests with jsdom loading `index.html`: opening moves focus to `#assistant-input` and sets `aria-expanded`; Escape and `#assistant-close` close the panel and return focus to `#assistant-fab`; Enter and the send button submit; chips submit their label; the welcome message and disclaimer appear once; `#assistant-clear` empties the log and restores the welcome message; actions fill the inputs and call the existing search functions; the typing indicator is present before the reply with fake timers and absent under a mocked `prefers-reduced-motion`; `localStorage` and `sessionStorage` stay empty.
+- Structure tests extend `tests/structure.test.js`: ids `assistant-fab`, `assistant-panel` (`role="dialog"`, `aria-label`), `assistant-log` (`aria-live="polite"`), `assistant-form`, `assistant-input`, `assistant-send`, `assistant-suggestions`, `assistant-close`, `assistant-clear`, four chips, the footer disclaimer, and CSS assertions (`.assistant-fab`, `.assistant-panel`, `env(safe-area-inset-bottom)`, `min-height: 44px`, `prefers-reduced-motion`).
+- Existing tests must keep passing without being weakened.
+
 ## Performance Considerations
 
 - All catalogs are small static arrays (< 50 entries each). Filter and sort operations are O(n) and imperceptible.
@@ -1380,6 +1736,15 @@ Manual smoke test by opening `index.html` in a browser:
 - **CSP-friendly**: The app requires no inline event attribute exceptions beyond what standard HTML `onclick` attributes need; a permissive default-src 'self' policy is sufficient.
 
 ---
+
+### Assistant security and privacy (Requirement 18)
+
+- **XSS**: user text and assistant text are inserted with `textContent` only. Action buttons are created with `createElement` and `textContent`. No user input reaches `innerHTML`. Any markup that is ever assembled as a string passes through the existing escape helper first.
+- **No network**: `interpretMessage` and `assistantReply` never call `fetch`. The only network use is the existing, user-triggered hospital flow behind the "Buscar hospitales cerca de mí" action, with the existing Privacy_Notice.
+- **No storage**: messages are kept only in the DOM. The assistant does not use `localStorage`, `sessionStorage`, cookies, or IndexedDB, and a reload clears the conversation.
+- **Input bounds**: messages over 300 characters are rejected before any matching, which bounds the work of keyword scanning.
+- **Medical safety**: emergency keywords take priority and produce a call-the-emergency-number warning. The assistant gives general information only, never doses or diagnoses, and shows a disclaimer in the first message and the panel footer.
+- **Action values**: values filled into `<select>` elements come from the catalogs, so no user text is assigned to them.
 
 ## Dependencies
 

@@ -162,6 +162,34 @@
     </a>
   </nav>
 
+  <button id="assistant-fab" class="assistant-fab" type="button"
+          aria-label="Abrir asistente de salud" aria-expanded="false"
+          aria-controls="assistant-panel">💬</button>
+
+  <section id="assistant-panel" class="assistant-panel" role="dialog"
+           aria-label="Asistente de salud" hidden>
+    <header class="assistant-header">
+      <h2>Asistente de salud</h2>
+      <button id="assistant-close" type="button" aria-label="Cerrar asistente">✕</button>
+    </header>
+    <div id="assistant-log" class="assistant-log" role="log" aria-live="polite"></div>
+    <div id="assistant-suggestions" class="assistant-suggestions">
+      <button type="button" class="chip">Hospitales cerca de mí</button>
+      <button type="button" class="chip">Buscar ibuprofeno</button>
+      <button type="button" class="chip">Comparar precios</button>
+      <button type="button" class="chip">Citas de cardiología</button>
+    </div>
+    <form id="assistant-form" class="assistant-form" autocomplete="off">
+      <label for="assistant-input" class="sr-only">Escribe tu pregunta</label>
+      <input id="assistant-input" type="text" maxlength="300" placeholder="Escribe tu pregunta">
+      <button id="assistant-send" type="submit">Enviar</button>
+    </form>
+    <footer class="assistant-footer">
+      <button id="assistant-clear" type="button">Borrar conversación</button>
+      <p>Información general, no es consejo médico ni diagnóstico. Tus mensajes no salen de tu navegador.</p>
+    </footer>
+  </section>
+
   <script src="app.js"></script>
 </body>
 </html>
