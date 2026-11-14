@@ -1,0 +1,167 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Agente de Acceso a la Salud</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <a class="skip-link" href="#main">Saltar al contenido</a>
+
+  <header class="welcome-hero" id="top">
+    <h1>Atención de calidad, <strong class="hero-accent">donde estés</strong></h1>
+    <p class="hero-subtitle">Encuentra hospitales cercanos, medicamentos, precios y citas en un solo lugar.</p>
+    <ul class="feature-strip">
+      <li><span class="feature-icon" aria-hidden="true">🏥</span> <span class="feature-label">Hospitales cercanos</span></li>
+      <li><span class="feature-icon" aria-hidden="true">💊</span> <span class="feature-label">Medicamentos</span></li>
+      <li><span class="feature-icon" aria-hidden="true">🩺</span> <span class="feature-label">Citas</span></li>
+    </ul>
+    <button type="button" class="btn-pill" id="start-btn">Comenzar</button>
+  </header>
+
+  <nav class="topnav" aria-label="Secciones">
+    <a href="#hospitals"><span class="nav-icon" aria-hidden="true">🏥</span> <span class="nav-label">Hospitales</span></a>
+    <a href="#medications"><span class="nav-icon" aria-hidden="true">💊</span> <span class="nav-label">Medicamentos</span></a>
+    <a href="#prices"><span class="nav-icon" aria-hidden="true">💲</span> <span class="nav-label">Precios</span></a>
+    <a href="#appointments"><span class="nav-icon" aria-hidden="true">📅</span> <span class="nav-label">Citas</span></a>
+  </nav>
+
+  <main id="main">
+    <div id="home" class="home-area">
+      <div class="app-bar">
+        <span class="brand">Agente de Acceso a la Salud</span>
+        <span class="app-bar-info" aria-hidden="true">ⓘ</span>
+      </div>
+      <p class="greeting">Hola</p>
+      <h2 class="home-heading">¿Cómo podemos ayudarte hoy?</h2>
+      <div class="quick-actions">
+        <a class="quick-tile" href="#hospitals"><span class="quick-icon quick-icon-hospitals" aria-hidden="true">🏥</span><span class="quick-label">Hospitales</span></a>
+        <a class="quick-tile" href="#medications"><span class="quick-icon quick-icon-medications" aria-hidden="true">💊</span><span class="quick-label">Medicamentos</span></a>
+        <a class="quick-tile" href="#prices"><span class="quick-icon quick-icon-prices" aria-hidden="true">💲</span><span class="quick-label">Precios</span></a>
+        <a class="quick-tile" href="#appointments"><span class="quick-icon quick-icon-appointments" aria-hidden="true">📅</span><span class="quick-label">Citas</span></a>
+      </div>
+      <div id="featured-appointment" class="featured-card" hidden></div>
+    </div>
+
+    <section id="hospitals" class="panel" aria-labelledby="hospitals-title">
+      <div class="panel-header">
+        <span class="panel-icon" aria-hidden="true">🏥</span>
+        <h2 id="hospitals-title">Hospitales cercanos</h2>
+        <p class="section-desc">Encuentra los centros médicos más cercanos usando tu ubicación o una dirección.</p>
+      </div>
+      <div class="controls">
+        <label for="hospital-count-select">Resultados</label>
+        <select id="hospital-count-select">
+          <option value="3" selected>3</option>
+          <option value="5">5</option>
+          <option value="10">10</option>
+        </select>
+        <label for="hospital-radius-select">Radio</label>
+        <select id="hospital-radius-select">
+          <option value="any" selected>Cualquier distancia</option>
+          <option value="5">5 km</option>
+          <option value="10">10 km</option>
+          <option value="25">25 km</option>
+          <option value="50">50 km</option>
+        </select>
+        <button type="button" class="btn btn-primary" onclick="nearbyHospitals()">Buscar más cercanos</button>
+      </div>
+      <div class="controls">
+        <label for="location-input">Dirección o ciudad</label>
+        <input type="text" id="location-input" placeholder="p. ej. Av. Reforma 222, Ciudad de México" maxlength="200">
+        <button type="button" class="btn btn-secondary" onclick="searchByAddress()">Buscar por dirección</button>
+      </div>
+      <p id="privacy-notice" class="privacy-notice">Tus coordenadas o la dirección que escribas se envían a los servicios de OpenStreetMap (Nominatim y Overpass API) para encontrar hospitales cercanos.</p>
+      <p id="hospitals-results-summary" class="results-summary" aria-live="polite"></p>
+      <div id="hospitals-results" class="results" aria-live="polite"></div>
+      <p id="osm-attribution" class="attribution" hidden>Datos © colaboradores de OpenStreetMap</p>
+    </section>
+
+    <section id="medications" class="panel" aria-labelledby="medications-title">
+      <div class="panel-header">
+        <span class="panel-icon" aria-hidden="true">💊</span>
+        <h2 id="medications-title">Disponibilidad de medicamentos</h2>
+        <p class="section-desc">Consulta qué farmacias tienen tu medicamento en existencia.</p>
+      </div>
+      <div class="controls">
+        <label for="medication-input">Nombre del medicamento</label>
+        <input type="text" id="medication-input" placeholder="Ibuprofeno" maxlength="250">
+        <button type="button" class="btn btn-primary" onclick="searchMedications()">Buscar</button>
+      </div>
+      <p id="medications-results-summary" class="results-summary" aria-live="polite"></p>
+      <div id="medications-results" class="results" aria-live="polite"></div>
+    </section>
+
+    <section id="prices" class="panel" aria-labelledby="prices-title">
+      <div class="panel-header">
+        <span class="panel-icon" aria-hidden="true">💲</span>
+        <h2 id="prices-title">Comparador de precios</h2>
+        <p class="section-desc">Compara lo que cobran distintos proveedores por un servicio.</p>
+      </div>
+      <div class="controls">
+        <label for="service-select">Servicio</label>
+        <select id="service-select">
+          <option value="">-- Selecciona un servicio --</option>
+          <option value="Consulta General">Consulta General</option>
+          <option value="Radiografía">Radiografía</option>
+          <option value="Análisis de Sangre">Análisis de Sangre</option>
+        </select>
+        <button type="button" class="btn btn-primary" onclick="comparePrices()">Comparar</button>
+      </div>
+      <p id="prices-results-summary" class="results-summary" aria-live="polite"></p>
+      <div id="prices-results" class="results" aria-live="polite"></div>
+    </section>
+
+    <section id="appointments" class="panel" aria-labelledby="appointments-title">
+      <div class="panel-header">
+        <span class="panel-icon" aria-hidden="true">📅</span>
+        <h2 id="appointments-title">Citas</h2>
+        <p class="section-desc">Consulta los horarios de cita disponibles por especialidad.</p>
+      </div>
+      <div class="controls">
+        <label for="specialty-select">Especialidad</label>
+        <select id="specialty-select">
+          <option value="">-- Selecciona una especialidad --</option>
+          <option value="Cardiología">Cardiología</option>
+          <option value="Pediatría">Pediatría</option>
+          <option value="Dermatología">Dermatología</option>
+        </select>
+        <button type="button" class="btn btn-primary" onclick="searchAppointments()">Buscar</button>
+      </div>
+      <p id="appointments-results-summary" class="results-summary" aria-live="polite"></p>
+      <div id="appointments-results" class="results" aria-live="polite"></div>
+    </section>
+  </main>
+
+  <footer>
+    <p>Datos de demostración. No es consejo médico. En caso de emergencia llama a tu número de emergencias local.</p>
+    <p>Ubicaciones de hospitales: © colaboradores de OpenStreetMap.</p>
+  </footer>
+
+  <nav class="tabbar" aria-label="Navegación principal">
+    <a class="tab" href="#home">
+      <svg class="tab-icon" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M3 11l9-8 9 8"/><path d="M5 10v10h14V10"/></svg>
+      <span class="tab-label">Inicio</span>
+    </a>
+    <a class="tab" href="#hospitals">
+      <svg class="tab-icon" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><rect x="4" y="3" width="16" height="18" rx="2"/><path d="M12 8v8M8 12h8"/></svg>
+      <span class="tab-label">Hospitales</span>
+    </a>
+    <a class="tab-fab" href="#prices">
+      <svg class="tab-icon" width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><circle cx="12" cy="12" r="9"/><path d="M14.5 9.5a2.5 2 0 0 0-2.5-1.5c-1.4 0-2.5.8-2.5 2s1.1 1.7 2.5 2 2.5.8 2.5 2-1.1 2-2.5 2a2.5 2 0 0 1-2.5-1.5M12 6.5V8m0 8v1.5"/></svg>
+      <span class="tab-label">Precios</span>
+    </a>
+    <a class="tab" href="#medications">
+      <svg class="tab-icon" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><rect x="3" y="9" width="18" height="6" rx="3" transform="rotate(-45 12 12)"/><path d="M9.5 9.5l5 5"/></svg>
+      <span class="tab-label">Medicamentos</span>
+    </a>
+    <a class="tab" href="#appointments">
+      <svg class="tab-icon" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 3v4M16 3v4"/></svg>
+      <span class="tab-label">Citas</span>
+    </a>
+  </nav>
+
+  <script src="app.js"></script>
+</body>
+</html>
