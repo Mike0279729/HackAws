@@ -1,0 +1,60 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Salud Cercana</title>
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <main class="container">
+      <h1>Salud Cercana</h1>
+      <p class="subtitle">
+        Accede a servicios de salud con mayor facilidad desde un solo lugar.
+      </p>
+
+      <section class="card">
+        <h2>Hospitales y centros cercanos</h2>
+        <button id="locate-button" type="button">Usar mi ubicación</button>
+        <p id="location-status" class="status"></p>
+        <ul id="nearby-results"></ul>
+      </section>
+
+      <section class="card">
+        <h2>Disponibilidad de medicamentos</h2>
+        <label for="medicine-input">Medicamento</label>
+        <input id="medicine-input" type="text" placeholder="Ej. Ibuprofeno" />
+        <button id="medicine-button" type="button">Consultar</button>
+        <ul id="medicine-results"></ul>
+      </section>
+
+      <section class="card">
+        <h2>Comparador de precios</h2>
+        <label for="service-select">Servicio</label>
+        <select id="service-select">
+          <option value="consulta-general">Consulta general</option>
+          <option value="consulta-especialista">Consulta especialista</option>
+          <option value="rayos-x">Rayos X</option>
+          <option value="analisis-sangre">Análisis de sangre</option>
+        </select>
+        <button id="pricing-button" type="button">Comparar</button>
+        <ul id="pricing-results"></ul>
+      </section>
+
+      <section class="card">
+        <h2>Citas médicas disponibles</h2>
+        <label for="specialty-select">Especialidad</label>
+        <select id="specialty-select">
+          <option value="medicina-general">Medicina general</option>
+          <option value="pediatria">Pediatría</option>
+          <option value="cardiologia">Cardiología</option>
+          <option value="dermatologia">Dermatología</option>
+        </select>
+        <button id="appointments-button" type="button">Buscar citas</button>
+        <ul id="appointments-results"></ul>
+      </section>
+    </main>
+
+    <script src="./app.js"></script>
+  </body>
+</html>
